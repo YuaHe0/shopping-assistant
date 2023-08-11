@@ -1,0 +1,246 @@
+{% extends 'bases/base_page.html' %}
+{% load static %}
+
+{% block content %}
+
+<div class="columns is-centered">
+    <div class="column">
+        <div class="block">
+    
+            
+            <div class="card">
+
+                <!-- Product image -->
+                <div class="card-image">
+                    <figure class="image">
+                        <img id="product-image" class="p-4" src="{{ viewingProduct.image_url }}" alt="Product image">
+                    </figure>
+                </div>
+
+                <div class="card-content">
+
+                    <div class="block">
+                        <p class="title">{{ viewingProduct.name }}</p>
+
+                        <!-- Price tag -->
+                        <span class="tag has-addons is-white is-medium px-0">
+                            <span class="tag is-white is-medium">
+                                <figure class="image is-32x32">
+                                    <img src="{% static 'img/' %}{{ viewingProduct.retailer }}.png" alt="{{ viewingProduct.retailer }}">
+                                </figure>
+                            </span>
+                            <span class="tag is-medium has-background-primary-light"><strong>${{ viewingProduct.price }}</strong></span>
+                        </span>
+                    </div>
+
+                    <!-- Product description box -->
+                    <div id="product-description" class="box mb-0">
+                        <p class="heading">Product Description</p>
+                        <p id="product-description-content">{{ viewingProduct.description }}</p>
+                    </div>
+
+                    <!-- Loading indicator for when additional details are being gotten -->
+                    <progress id="loading-indicator" class="progress is-small is-primary is-hidden mt-4" max="100">30%</progress>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+    
+
+    <!-- This is the right side where we have actions related to the products-->
+    <div class="column">
+        
+        <div class="container">
+
+            <!-- This is the "Add to watchlist" action -->
+            <div class="box">
+                <h1 class="title is-6">Add to Watchlist</h1>
+            
+                <div class="field">
+                    <div class="control">
+                        <div class="select is-fullwidth">
+                            <select id="watchlist-dropdown" onChange="updateActionButtons()">
+                                {% for watchlist in watchlists %}
+                                <option value="{{ watchlist.id }}">{{ watchlist.title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="field">
+                    <div class="control">
+                        <button id="add-to-watchlist-button" class="button is-primary">Add</button>
+                        <button id="remove-from-watchlist-button" class="button is-danger">Remove</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="container">
+            <div class="box">
+                <h1 class="title is-6">You May Also Like</h1>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Image</th>
+                            <th>Name</th>
+                            <th>Price</th>
+                            <th>Retailer</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for product in similarlists %}
+                            <tr>
+                                <td><img class="image is-32x32" src="{{ product.image_url }}" alt="{{ product.name }}" width="100px"></td>
+                                <td><a href="{% url 'product' product.id %}"> {{ product.name }}</a></td>
+                                <td>{{ product.price }}</td>
+                                <td>
+                                    <figure class="image is-32x32">
+                                        <img src="{% static 'img/' %}{{ product.retailer }}.png" alt="">
+                                    </figure>
+                                </td>
+                                <td><a  href="{% url 'compareProduct' product.id viewingProduct.id %}" data-product-id="{{ product.id }}">Compare</a></td>  
+                            </tr>
+                        {% endfor %}
+                        <tr>
+                          <td colspan="3" align="right"><span id="total-cost" style="font-weight: bold;"></td>
+                        </tr>
+                      </tbody>
+                </table>
+            </div>
+
+        </div>
+
+    </div>
+   
+        
+       
+
+    
+</div>
+
+{% endblock %}
+
+{% block javascript %}
+{% comment %} for some reason moving this js to a static/ file it causes csrf_token errors {% endcomment %}
+<script>
+    $(document).ready(function() {
+        
+        updateActionButtons();
+        
+        // Get product details
+        $.ajax({
+            url: "/get-product-details/",
+            type: "POST",
+            data: {
+                'product_id': '{{ product.id }}',
+                'csrfmiddlewaretoken': '{{ csrf_token }}'
+            },
+            beforeSend: function() {
+                // unhide the loading indicator
+                $('#loading-indicator').removeClass('is-hidden');
+
+                // if the product-description-content text is empty, hide the product description box
+                if ($('#product-description-content').text() == "") {
+                    $('#product-description').addClass('is-hidden');
+                }
+            },
+            success: function(response) {
+                $('#product-description-content').text(response.description);
+
+                // unhide the product description box
+                $('#product-description').removeClass('is-hidden');
+            },
+            error: function(xhr, status, error) {
+                console.log(xhr.responseText);
+            },
+            complete: function() {
+                // hide the loading indicator
+                $('#loading-indicator').addClass('is-hidden');
+            }
+        });
+        
+        
+        // Add product to watchlist button
+        $('#add-to-watchlist-button').click(function() {
+            var selectedWatchlistId = $('#watchlist-dropdown').val();
+            var productId = '{{ product.id }}';
+            
+            // Send add request via ajax
+            $.ajax({
+                url: "/watchlist/add/" + selectedWatchlistId + "/" + productId,
+                method: "POST",
+                data: {
+                    'csrfmiddlewaretoken': '{{ csrf_token }}'
+                },
+                success: function(response) {
+                    updateActionButtons();
+                },
+                error: function(xhr, status, error) {
+                    console.log(error);
+                }
+            });
+        });
+        
+        // Remove product from watchlist
+        $('#remove-from-watchlist-button').click(function(e) {
+            e.preventDefault();
+            var watchlist_id = $('#watchlist-dropdown').val();
+            var product_id = '{{ product.id }}';
+            
+            // Send remove request via ajax
+            $.ajax({
+                url: "/watchlist/remove/" + watchlist_id + "/" + product_id,
+                type: 'POST',
+                data: {
+                    'watchlist_id': watchlist_id,
+                    'product_id': product_id,
+                    'csrfmiddlewaretoken': '{{ csrf_token }}'
+                },
+                success: function(response) {
+                    updateActionButtons();
+                },
+                error: function(xhr, status, error) {
+                    console.log(error);
+                }
+            });
+        });
+    });
+    
+    function updateActionButtons () {
+        // Get the currently selected watchlist from the dropdown
+        var selectedWatchlistId = $('#watchlist-dropdown').val();
+        var productId = '{{ product.id }}';
+        
+        // If the product is already in the watchlist, disable the add button
+        $.ajax({
+            url: "/is-product-in-watchlist/" + selectedWatchlistId + "/" + productId,
+            type: "POST",
+            data: {
+                watchlist_id: selectedWatchlistId,
+                product_id: productId,
+                'csrfmiddlewaretoken': '{{ csrf_token }}'
+            },
+            success: function(response) {
+                if (response.status == true) {
+                    // Product is already in the watchlist
+                    $('#add-to-watchlist-button').addClass('is-hidden');
+                    $('#remove-from-watchlist-button').removeClass('is-hidden');
+                    return;
+                } else if (response.status == false) {
+                    // Product is not in the watchlist
+                    $('#add-to-watchlist-button').removeClass('is-hidden');
+                    $('#remove-from-watchlist-button').addClass('is-hidden');
+                } else {
+                    console.log("error");
+                }
+            },
+        })
+    }
+    
+</script>
+
+{% endblock javascript %}
+
+
