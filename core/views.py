@@ -4,20 +4,16 @@ from django.http import JsonResponse
 from django.views import View
 from django.views.generic import ListView
 from core.forms import ProfileForm, UserForm
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework.renderers import TemplateHTMLRenderer
-from rest_framework.views import APIView
-from rest_framework.decorators import api_view
 from django.contrib import messages
 from .models import *
 from .serializers import *
 from core import scrapers
-from django.contrib.auth import login,logout
+from django.contrib.auth import logout
 from django.contrib.auth.models import User
 from django.contrib import auth
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from datetime import date
 
 def home(request):
      
@@ -26,8 +22,10 @@ def home(request):
             return render(request, 'index.html')
     else:
         return redirect(SignIn)
-
-     
+    
+def howtoguide(request):
+    return render(request, 'howto.html')
+ 
 def SignUp(request):
     if request.method == "POST":
         name = request.POST.get('username' )
@@ -62,15 +60,12 @@ def SignIn(request):
             messages.error(request,"Invalid username or password.")
     return render(request=request, template_name="signin.html")
 
-
 def SignOut(request):
     logout(request)
     print("goooddddd")
     messages.success(request, "Logged Out Successfully!!")
 
     return redirect(SignIn)
-
-#### Please dont put unneccessary or bloaty views in here that arent being worked on. Add them when they make sense to add.
 
 # Page Views
 class SearchView(ListView):
@@ -90,7 +85,6 @@ class SearchView(ListView):
         context = super().get_context_data(**kwargs)
         context['query'] = self.request.GET.get('q')
         return context
-    
 
 class SearchView_Watchlist(ListView):
     model = Product
@@ -118,7 +112,7 @@ class ProductView(View):
     def get(self, request, product_id):
         print(product_id)
         product = Product.objects.get(id=product_id)
-        return render(request, 'product.html', {'product': product})
+        return render(request, 'product.html', {'viewingProduct': product})
     
 class WatchlistsView(View):
     model = Watchlist
@@ -164,7 +158,6 @@ class WatchlistAddProductView(View):
 
         return render(request, self.template_name, {'watchlist': watchlist})
     
-
 class SearchView(ListView):
     model = Product
     template_name = 'search.html'
@@ -191,13 +184,54 @@ class ProductView(View):
         print(product_id)
         product = Product.objects.get(id=product_id)
         watchlists = Watchlist.objects.filter(owner=request.user)
-        return render(request, 'product.html', {
-            'product': product,
+        stop_words = set(['the', 'and', 'a', 'an', 'in', 'on', 'at', 'is', 'it', 'of', 'for','with','Woolworths', 'Coles',
+                      'Aldi' 'woolworths', 'coles',
+                      'aldi','No','Yes','Each','each','Pack','Pack','bottle','Bottle'])  # Define your own set of stopwords
+        description = product.name
+        description = description.lower()
+
+        # Remove punctuation
+        punctuation = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'
+        description = description.translate(str.maketrans('', '', punctuation))
+
+        # Split into words
+        words = description.split()
+
+        # Remove stopwords and words containing digits
+        keywords = [word for word in words if word not in stop_words and not any(char.isdigit() for char in word)]
+
+        combined_list = []
+
+        for keyword in keywords:
+            similar_lists = Product.objects.filter(name__icontains=keyword)
+            combined_list.extend(similar_lists)
+
+        combined_list = list(set(combined_list))  # Remove duplicate items
+        
+        # Retrieve historical prices
+        historical_prices = HistoricalPrice.objects.filter(product=product).order_by('-date')
+        
+        context = {
+            'viewingProduct': product,
             'watchlists': watchlists,
+            'similarlists': combined_list,
+            'historicalPrices': historical_prices
+        }
+        
+        return render(request, 'product.html', context)
+        
+class CompareProductView(View):
+    model = Product
+    template_name = 'compareProduct.html'
+    def get(self, request, product_id,viewingproduct_id):
+        
+        product = Product.objects.get(id=product_id)
+        product2 = Product.objects.get(id=viewingproduct_id)
+        return render(request, 'compareProduct.html', {
+            'viewingProduct': product2,
+            'Product': product,
+             
             })
-
-
-
 # API  or Data Views
 
 def get_product_details(request):
@@ -332,11 +366,9 @@ def is_product_in_watchlist(request, watchlist_id, product_id):
         
 # User Profile views
 
-
 def profile(request):
     User = request.user
     return render(request, 'profile.html', {'user': User})
-
 
 @login_required(login_url='signin/')
 @transaction.atomic
@@ -362,67 +394,42 @@ def editProfile(request):
         'profile_form': profile_form
     })
 
-# Test Views
-# ...
+# Historical Price views
 
+def historical_price(request, product_id):
+    product = get_object_or_404(Product, id=product_id)
+    historicalPrices = HistoricalPrice.objects.filter(product=product).order_by('-date')
+    context = {
+        'productName': product,
+        'historicalPrices': historicalPrices
+    }
+    return render(request, 'product.html', context)
 
-
-
-
-
-
-
-
-
-
-
-# For reference @Jehan
-
-class Watchlists(APIView):
-    renderer_classes = [TemplateHTMLRenderer]
-    template_name = 'watchlists.html'
-
-    def get(self, request):
-        queryset = Watchlist.objects.all()
-        return Response({'watchlists': queryset}) 
-
-class WatchlistDetails(APIView):
-    renderer_classes = [TemplateHTMLRenderer]
-    template_name = 'watchlistdetail.html'
-
-    def get(self, request, id):
-        watchlist = get_object_or_404(Watchlist, id=id)
-        serializer = WatchlistSerializer(watchlist)
-        return Response({'serializer': serializer, 'watchlist': watchlist})
-
-@api_view(['GET'])
-def watchlists(request):
-    watchlists = Watchlist.objects.all()
-    serializer = WatchlistSerializer(watchlists, many=True)
-    return Response(serializer.data)
-
-@api_view(['POST'])
-def watchlistcreate(request):
-    serializer = WatchlistSerializer(data=request.data)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data)
+def store_historical_price(request, product_id):
+    product = get_object_or_404(Product, id=product_id)
+    current_price = product.price
     
-@api_view(['PUT'])
-def watchlistupdate(request, id):
-    watchlist = Watchlist.objects.get(id=id)
-    serializer = WatchlistSerializer(instance=watchlist, data=request.data)
-    
-    if serializer.is_valid():
-        serializer.save()
-    
-    return Response(serializer.data)
-    
-@api_view(['DELETE'])
-def watchlistdelete(request, id): 
-    watchlist = Watchlist.objects.get(id=id)           
-    watchlist.delete()
-    
-    return Response('Item deleted')
+    status = 200
 
-# Test Views
+    latest_price_entry = HistoricalPrice.objects.filter(product=product).order_by('-date').first()
+
+    # Check if new price is different to existing price
+    if latest_price_entry is None or latest_price_entry.price != current_price:
+        historical_price = HistoricalPrice(product=product, price=current_price, date=date.today())
+        historical_price.save()
+        return JsonResponse({'success': True})
+
+    return JsonResponse({'success': False})
+
+
+
+
+
+
+
+
+
+
+
+
+

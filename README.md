@@ -9,6 +9,11 @@ The application is still in a very early stage of development. We are in the pro
 
 - Django - The web framework used
 - Docker - Containerization technology
+
+## Authors
+
+- Shey Laplanche
+
 ## License
 
 This project is not currently licensed. This will be updated in an upcoming release.

@@ -1,6 +1,4 @@
 from django.db import models
-from django import forms
-from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -17,6 +15,17 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
+
+class HistoricalPrice(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    date = models.DateField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+
+    class Meta:
+        ordering = ['-date']
+        
+    def __str__(self):
+        return self.product.name
 
 class Watchlist(models.Model):
     id = models.AutoField(primary_key=True)
@@ -47,31 +56,4 @@ class Profile(models.Model):
 
     def __str__(self):
         return self.user.username
-
-# class Retailer(models.Model):
-#     id = models.AutoField(primary_key=True)
-#     name = models.CharField(max_length=100)
-#     url = models.URLField()
-
-# class Location(models.Model):
-#     id = models.AutoField(primary_key=True)
-#     latlon = models.DecimalField(max_digits=9, decimal_places=6)
-#     address = models.TextField()
-
-# class Store(models.Model):
-#     id = models.AutoField(primary_key=True)
-#     name = models.CharField(max_length=100)
-#     retailerID = models.ForeignKey(Retailer,on_delete=models.DO_NOTHING)
-#     location = models.OneToOneField(Location,on_delete=models.DO_NOTHING)
-#     product = models.ManyToManyField(Product)
-
-# DEPRECATED -> User is now a built-in model
-# class User(models.Model):
-#     id = models.AutoField(primary_key=True)
-#     name = models.CharField(max_length=100)
-#     email = models.EmailField()
-#     address = models.TextField()
-
-#     def __str__(self):
-#         return self.name
 

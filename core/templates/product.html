@@ -30,6 +30,8 @@
                                 </figure>
                             </span>
                             <span class="tag is-medium has-background-primary-light"><strong>${{ viewingProduct.price }}</strong></span>
+                    
+                            <button id="store-price-button" class="button is-info ml-2">Save Price</button>
                         </span>
                     </div>
 
@@ -41,6 +43,28 @@
 
                     <!-- Loading indicator for when additional details are being gotten -->
                     <progress id="loading-indicator" class="progress is-small is-primary is-hidden mt-4" max="100">30%</progress>
+                    
+                    <div id="historical-price" class="box mb-0">
+                        <div class="container">
+                            <p class="heading">Historical Prices</p>
+                            <table class="table is-striped is-hoverable is-fullwidth">
+                              <thead>
+                                <tr>
+                                  <th>Date</th>
+                                  <th>Price</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {% for historicalPrice in historicalPrices %}
+                                  <tr>
+                                    <td>{{ historicalPrice.date }}</td>
+                                    <td>${{ historicalPrice.price }}</td>
+                                  </tr>
+                                {% endfor %}
+                              </tbody>
+                            </table>
+                          </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -80,34 +104,36 @@
         <div class="container">
             <div class="box">
                 <h1 class="title is-6">You May Also Like</h1>
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Image</th>
-                            <th>Name</th>
-                            <th>Price</th>
-                            <th>Retailer</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for product in similarlists %}
+                <div style="height: 900px; overflow-y: scroll;">
+                    <table class="table">
+                        <thead>
                             <tr>
-                                <td><img class="image is-32x32" src="{{ product.image_url }}" alt="{{ product.name }}" width="100px"></td>
-                                <td><a href="{% url 'product' product.id %}"> {{ product.name }}</a></td>
-                                <td>{{ product.price }}</td>
-                                <td>
-                                    <figure class="image is-32x32">
-                                        <img src="{% static 'img/' %}{{ product.retailer }}.png" alt="">
-                                    </figure>
-                                </td>
-                                <td><a  href="{% url 'compareProduct' product.id viewingProduct.id %}" data-product-id="{{ product.id }}">Compare</a></td>  
+                                <th>Image</th>
+                                <th>Name</th>
+                                <th>Price</th>
+                                <th>Retailer</th>
                             </tr>
-                        {% endfor %}
-                        <tr>
-                          <td colspan="3" align="right"><span id="total-cost" style="font-weight: bold;"></td>
-                        </tr>
-                      </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            {% for product in similarlists %}
+                                <tr>
+                                    <td><img class="image is-32x32" src="{{ product.image_url }}" alt="{{ product.name }}" width="100px"></td>
+                                    <td><a href="{% url 'product' product.id %}"> {{ product.name }}</a></td>
+                                    <td>{{ product.price }}</td>
+                                    <td>
+                                        <figure class="image is-32x32">
+                                            <img src="{% static 'img/' %}{{ product.retailer }}.png" alt="">
+                                        </figure>
+                                    </td>
+                                    <td><a  href="{% url 'compareProduct' product.id viewingProduct.id %}"  class="button is-primary"  data-product-id="{{ product.id }}">Compare</a></td>  
+                                </tr>
+                            {% endfor %}
+                            <tr>
+                              <td colspan="3" align="right"><span id="total-cost" style="font-weight: bold;"></td>
+                            </tr>
+                          </tbody>
+                    </table>    
+                </div>           
             </div>
 
         </div>
@@ -134,7 +160,7 @@
             url: "/get-product-details/",
             type: "POST",
             data: {
-                'product_id': '{{ product.id }}',
+                'product_id': '{{ viewingProduct.id }}',
                 'csrfmiddlewaretoken': '{{ csrf_token }}'
             },
             beforeSend: function() {
@@ -161,11 +187,10 @@
             }
         });
         
-        
         // Add product to watchlist button
         $('#add-to-watchlist-button').click(function() {
             var selectedWatchlistId = $('#watchlist-dropdown').val();
-            var productId = '{{ product.id }}';
+            var productId = '{{ viewingProduct.id }}';
             
             // Send add request via ajax
             $.ajax({
@@ -187,7 +212,7 @@
         $('#remove-from-watchlist-button').click(function(e) {
             e.preventDefault();
             var watchlist_id = $('#watchlist-dropdown').val();
-            var product_id = '{{ product.id }}';
+            var product_id = '{{ viewingProduct.id }}';
             
             // Send remove request via ajax
             $.ajax({
@@ -211,7 +236,7 @@
     function updateActionButtons () {
         // Get the currently selected watchlist from the dropdown
         var selectedWatchlistId = $('#watchlist-dropdown').val();
-        var productId = '{{ product.id }}';
+        var productId = '{{ viewingProduct.id }}';
         
         // If the product is already in the watchlist, disable the add button
         $.ajax({
@@ -239,6 +264,40 @@
         })
     }
     
+    // Save historical price of product
+    $('#store-price-button').click(function() {
+        var productId = '{{ viewingProduct.id }}';
+        var price = parseFloat('{{ viewingProduct.price }}');
+        var button = $(this); // Reference to the button element
+        
+        // Disable the button
+        button.prop('disabled', true);
+
+        // Send add request via ajax
+        $.ajax({
+            url: "/store-historical-price/" + productId,
+            method: "POST",
+            data: {
+                'csrfmiddlewaretoken': '{{ csrf_token }}'
+            },
+            success: function(response) {
+                if (response.success) {
+                    $('#store-price-button').text('Saved');
+                    // Get the current date
+                    var currentDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                    // Create a new row with the latest data
+                    var newRow = $('<tr><td>' + currentDate + '</td><td>$' + price + '</td></tr>');
+                    $('#historical-price tbody').prepend(newRow);
+                } else {
+                    $('#store-price-button').text('Price up to date');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.log(error);
+            }
+        });
+    }); 
+
 </script>
 
 {% endblock javascript %}
